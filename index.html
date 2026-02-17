@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DoorFlow CRM | Door Selling & Service Business</title>
+    <meta name="description"
+        content="Professional CRM Dashboard for Door Selling and Service Business tracking leads, design, production, and delivery.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body class="light-mode">
+    <style>
+        /* CSS Reset */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #f3f4f6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        input,
+        button,
+        select,
+        textarea {
+            font-family: inherit;
+        }
+
+        /* Fix for hidden elements */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+
+    <body class="light-mode">
+        <!-- Invoice Template (Hidden) -->
+        <div id="invoice-template"
+            style="position:fixed; top:-9999px; width:210mm; min-height:297mm; background:white; color:black; font-family:'Inter',sans-serif; padding:10mm; box-sizing:border-box;">
+            <div style="border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:start;">
+                    <div>
+                        <h1 style="margin:0; font-size:24px; color:#333;">INVOICE</h1>
+                        <p style="margin:5px 0 0; font-size:14px; color:#666;">Original for Recipient</p>
+                    </div>
+                    <div style="text-align:right;">
+                        <h2 style="margin:0; font-size:20px;" id="pdf-biz-name">Business Name</h2>
+                        <p style="margin:2px 0; font-size:12px;" id="pdf-biz-address">Address Line 1</p>
+                        <p style="margin:2px 0; font-size:12px;" id="pdf-biz-phone">Phone: 9999999999</p>
+                        <p style="margin:2px 0; font-size:12px;" id="pdf-biz-email">Email: info@doorflow.com</p>
+                        <p style="margin:2px 0; font-size:12px; font-weight:bold;">GSTIN: <span
+                                id="pdf-biz-gst">29ABCDE1234F1Z5</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; margin-bottom:30px;">
+                <div style="width:48%;">
+                    <h3 style="font-size:14px; margin-bottom:10px; border-bottom:1px solid #ddd; padding-bottom:5px;">
+                        BILL
+                        TO:</h3>
+                    <p style="margin:2px 0; font-size:13px; font-weight:bold;" id="pdf-cust-name">Customer Name</p>
+                    <p style="margin:2px 0; font-size:13px;" id="pdf-cust-phone">Phone: 9876543210</p>
+                    <p style="margin:2px 0; font-size:13px;" id="pdf-cust-address">Address goes here...</p>
+                    <p style="margin:5px 0; font-size:13px;"><b>GSTIN:</b> <span id="pdf-cust-gst">N/A</span></p>
+                </div>
+                <div style="width:48%; text-align:right;">
+                    <p style="margin:5px 0; font-size:13px;"><b>Invoice #:</b> <span id="pdf-inv-id">INV-001</span></p>
+                    <p style="margin:5px 0; font-size:13px;"><b>Date:</b> <span id="pdf-inv-date">01/01/2026</span></p>
+                    <p style="margin:5px 0; font-size:13px;"><b>Payment Status:</b> <span
+                            id="pdf-inv-status">Unpaid</span>
+                    </p>
+                </div>
+            </div>
+
+            <table style="width:100%; border-collapse:collapse; margin-bottom:20px; font-size:13px;">
+                <thead>
+                    <tr style="background:#f5f5f5; text-align:left;">
+                        <th style="padding:10px; border-bottom:1px solid #ddd;">#</th>
+                        <th style="padding:10px; border-bottom:1px solid #ddd;">Item Description</th>
+                        <th style="padding:10px; border-bottom:1px solid #ddd; text-align:center;">Qty</th>
+                        <th style="padding:10px; border-bottom:1px solid #ddd; text-align:right;">Price</th>
+                        <th style="padding:10px; border-bottom:1px solid #ddd; text-align:right;">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="pdf-items-body">
+                    <!-- Items will be injected here -->
+                </tbody>
+            </table>
+
+            <div style="display:flex; justify-content:flex-end;">
+                <div style="width:40%;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:13px;">
+                        <span>Subtotal:</span>
+                        <span id="pdf-subtotal">₹0.00</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:13px;">
+                        <span>CGST (<span class="pdf-gst-rate">9</span>%):</span>
+                        <span id="pdf-cgst">₹0.00</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:13px;">
+                        <span>SGST (<span class="pdf-gst-rate">9</span>%):</span>
+                        <span id="pdf-sgst">₹0.00</span>
+                    </div>
+                    <div
+                        style="display:flex; justify-content:space-between; margin-top:10px; border-top:2px solid #000; padding-top:10px; font-weight:bold; font-size:15px;">
+                        <span>Grand Total:</span>
+                        <span id="pdf-total">₹0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:50px; border-top:1px solid #ddd; padding-top:20px; font-size:12px; color:#666;">
+                <p><b>Terms & Conditions:</b></p>
+                <ol style="padding-left:20px; margin:5px 0;">
+                    <li>Goods once sold will not be taken back.</li>
+                    <li>Interest @ 18% p.a. will be charged on overdue payments.</li>
+                    <li>Subject to local jurisdiction only.</li>
+                </ol>
+                <p style="text-align:center; margin-top:30px;">Thank you for your business!</p>
+            </div>
+        </div>
+
+        <!-- Login System Overlay -->
+        <div id="login-overlay" class="login-overlay">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="logo-circle">
+                        <i class="fas fa-door-open"></i>
+                    </div>
+                    <h1>DoorFlow <span>CRM</span></h1>
+                    <p>Welcome back! Please select your role to login.</p>
+                </div>
+                <div class="login-form">
+                    <div class="form-group">
+                        <label>Employee ID</label>
+                        <input type="text" id="login-id" placeholder="Enter ID (e.g. ADM001)" class="login-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="login-pass" placeholder="Enter Password" class="login-input">
+                    </div>
+                    <button class="btn-login" onclick="handleLogin()">Login to Dashboard</button>
+
+                    <div class="demo-credentials">
+                        <small><strong>Demo Creds:</strong> Admin: ADM001/admin | Sales: SAL001/123</small>
+                    </div>
+                </div>
+                <div class="login-footer">
+                    <p>&copy; 2024 DoorFlow Systems. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Container -->
+        <div id="main-container" class="dashboard-container hidden">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <i class="fas fa-door-open logo-icon"></i>
+                    <span class="logo-text">DoorFlow</span>
+                </div>
+                <nav class="sidebar-nav">
+                    <div class="nav-section">
+                        <span class="nav-label">Main</span>
+                        <a href="#" class="nav-item active" data-view="dashboard">
+                            <i class="fas fa-th-large"></i>
+                            <span>Dashboard</span>
+                        </a>
+                        <a href="#" class="nav-item" data-view="leads" id="nav-leads">
+                            <i class="fas fa-users-viewfinder"></i>
+                            <span>Leads</span>
+                        </a>
+                        <a href="#" class="nav-item" data-view="tasks">
+                            <i class="fas fa-list-check"></i>
+                            <span>Tasks</span>
+                        </a>
+                    </div>
+                    <div class="nav-section">
+                        <span class="nav-label">Resources</span>
+                        <a href="#" class="nav-item" data-view="catalog" id="nav-catalog">
+                            <i class="fas fa-images"></i>
+                            <span>Catalog</span>
+                        </a>
+                        <a href="#" class="nav-item" data-view="invoices" id="nav-invoices">
+                            <i class="fas fa-file-invoice-dollar"></i>
+                            <span>Invoices & Billing</span>
+                        </a>
+                        <a href="#" class="nav-item" data-view="tracking" id="nav-tracking">
+                            <i class="fas fa-route"></i>
+                            <span>Track Orders</span>
+                        </a>
+                    </div>
+                    <div class="nav-section" id="nav-admin-section">
+                        <span class="nav-label">Management</span>
+                        <a href="#" class="nav-item" data-view="teams">
+                            <i class="fas fa-users-gear"></i>
+                            <span>Teams</span>
+                        </a>
+                    </div>
+                    <div class="nav-section">
+                        <span class="nav-label">System</span>
+                        <a href="#" class="nav-item" id="dark-mode-toggle">
+                            <i class="fas fa-moon"></i>
+                            <span>Dark Mode</span>
+                        </a>
+                        <a href="#" class="nav-item" id="logout-btn">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span>Logout</span>
+                        </a>
+                    </div>
+                </nav>
+                <div class="sidebar-footer">
+                    <div class="user-info">
+                        <div class="user-avatar" id="user-avatar-initial">A</div>
+                        <div class="user-details">
+                            <span id="current-user-name">Admin</span>
+                            <small id="current-user-role">Main Administrator</small>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Header -->
+                <header class="content-header">
+                    <div class="header-left">
+                        <h2 id="view-title">Dashboard Overview</h2>
+                    </div>
+                    <div class="header-right">
+                        <div class="search-bar">
+                            <i class="fas fa-search"></i>
+                            <input type="text" placeholder="Search tasks, leads...">
+                        </div>
+                        <div class="notification-bell">
+                            <i class="fas fa-bell"></i>
+                            <span class="badge">3</span>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Dynamic Content Area -->
+                <div id="content-body" class="content-body">
+                    <!-- Content will be injected by script.js -->
+                </div>
+            </main>
+        </div>
+
+        <!-- Modals -->
+        <div id="modal-container" class="modal-overlay hidden">
+            <div class="modal-content" id="modal-body">
+                <!-- Modal content injected here -->
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <script src="script.js"></script>
+    </body>
+
+</html>
