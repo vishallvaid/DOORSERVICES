@@ -1655,8 +1655,32 @@ navItems.forEach(item => {
     item.addEventListener('click', (e) => {
         if (item.id === 'dark-mode-toggle' || item.id === 'logout-btn') return;
         e.preventDefault();
+
+        // On mobile, close sidebar after clicking
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        if (sidebar.classList.contains('mobile-active')) {
+            sidebar.classList.remove('mobile-active');
+            overlay.classList.remove('active');
+        }
+
         renderView(item.dataset.view);
     });
+});
+
+// Mobile Sidebar Toggle
+document.getElementById('mobile-menu-toggle').addEventListener('click', () => {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    sidebar.classList.add('mobile-active');
+    overlay.classList.add('active');
+});
+
+document.getElementById('sidebar-overlay').addEventListener('click', () => {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    sidebar.classList.remove('mobile-active');
+    overlay.classList.remove('active');
 });
 
 document.getElementById('logout-btn').addEventListener('click', logout);
