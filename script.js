@@ -34,6 +34,7 @@ const firebaseConfig = {
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const storage = firebase.storage();
 
 // --- Initial Mock Data & Firebase Sync ---
 const initMockData = () => {
@@ -857,10 +858,7 @@ const generateInvoice = () => {
     showToast("GST Invoice Generated!", "success");
 };
 
-const downloadInvoicePDF = (id) => {
-    const inv = state.invoices.find(i => i.id === id);
-    if (!inv) return;
-
+const fillInvoiceTemplate = (inv) => {
     // Fill Template
     document.getElementById('pdf-biz-name').textContent = state.settings.bizName || 'Business Name';
     document.getElementById('pdf-biz-address').textContent = state.settings.bizAddress || '';
@@ -900,7 +898,11 @@ const downloadInvoicePDF = (id) => {
     document.getElementById('pdf-sgst').textContent = `₹${halfGst}`;
     document.getElementById('pdf-total').textContent = `₹${inv.total}`;
 
-    // Add signature or footer if needed
+    // Add signature footer
+    const invTemplate = document.getElementById('invoice-template');
+    const oldFooter = document.getElementById('pdf-footer-auth');
+    if (oldFooter) oldFooter.remove();
+
     const authFooter = document.createElement('div');
     authFooter.id = 'pdf-footer-auth';
     authFooter.style.marginTop = '40px';
@@ -911,13 +913,14 @@ const downloadInvoicePDF = (id) => {
             <p style="border-top:1px solid #333; padding-top:5px; width:150px; margin-left:auto;">Authorized Signatory</p>
         </div>
     `;
-
-    const invTemplate = document.getElementById('invoice-template');
-    const oldFooter = document.getElementById('pdf-footer-auth');
-    if (oldFooter) oldFooter.remove();
     invTemplate.appendChild(authFooter);
+};
 
-    // Add signature or footer if needed
+const downloadInvoicePDF = (id) => {
+    const inv = state.invoices.find(i => i.id === id);
+    if (!inv) return;
+
+    fillInvoiceTemplate(inv);
 
     // Generate PDF
     const { jsPDF } = window.jspdf;
@@ -1059,29 +1062,70 @@ const renderTracking = () => {
     `;
 };
 
-const sendInvoiceWhatsApp = (id) => {
+const sendInvoiceWhatsApp = async (id) => {
     const inv = state.invoices.find(i => i.id === id);
+    if (!inv) return;
 
-    // Simulate a PDF link by encoding the invoice details into a data structure 
-    // In a real app, this would be a link to a backend-generated PDF.
-    // Here we will format a professional message.
+    showToast("Generating PDF and Secure Link...", "info");
 
-    const itemsList = inv.items.map((item, index) =>
-        `${index + 1}. ${item.desc} (Qty: ${item.qty}) - ₹${item.price}`
-    ).join('%0A');
+    try {
+        // 1. Prepare Template with data
+        fillInvoiceTemplate(inv);
 
-    const msg = `*📄 INVOICE PDF: ${inv.id}*%0A%0A` +
-        `To: ${inv.customer}%0A` +
-        `GSTIN: ${inv.gstin}%0A` +
-        `Date: ${inv.date}%0A%0A` +
-        `*Items:*%0A${itemsList}%0A%0A` +
-        `----------------------------%0A` +
-        `*TOTAL AMOUNT: ₹${inv.total}* (Inc. GST)%0A` +
-        `----------------------------%0A%0A` +
-        `Please click here to download formal PDF: [Link_Placeholder]%0A%0A` +
-        `Thank you for your business!%0A*DoorFlow Services*`;
+        const element = document.getElementById('invoice-template');
+        const originalPos = element.style.position;
+        const originalTop = element.style.top;
+        const originalZ = element.style.zIndex;
 
-    openWhatsApp(inv.phone, msg);
+        element.style.position = 'absolute';
+        element.style.top = '0';
+        element.style.left = '0';
+        element.style.zIndex = '99999';
+
+        const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            windowWidth: element.scrollWidth,
+            windowHeight: element.scrollHeight
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgWidth = 210;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+
+        // Restore UI
+        element.style.position = originalPos;
+        element.style.top = originalTop;
+        element.style.zIndex = originalZ;
+
+        // 2. Convert to Blob
+        const pdfBlob = pdf.output('blob');
+
+        // 3. Upload to Firebase Storage
+        const storageRef = storage.ref(`invoices/${inv.id}_${Date.now()}.pdf`);
+        const snapshot = await storageRef.put(pdfBlob);
+        const downloadUrl = await snapshot.ref.getDownloadURL();
+
+        // 4. Send Professional Message with the Link
+        const msg = `*📄 DOORFLOW OFFICIAL INVOICE: ${inv.id}*%0A%0A` +
+            `Hello ${inv.customer},%0A` +
+            `Please find your official GST invoice below. Click the link to view/download the PDF:%0A%0A` +
+            `${downloadUrl}%0A%0A` +
+            `*Amount:* ₹${inv.total}%0A` +
+            `*Date:* ${inv.date}%0A%0A` +
+            `Thank you for choosing *DoorFlow Services*!`;
+
+        openWhatsApp(inv.phone, msg);
+        showToast("PDF Link sent successfully!", "success");
+
+    } catch (err) {
+        console.error("Failed to generate/upload PDF:", err);
+        showToast("Error sending PDF link: " + err.message, "danger");
+    }
 };
 
 const sendCatalogViaWhatsApp = () => {
