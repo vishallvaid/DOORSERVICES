@@ -1066,10 +1066,10 @@ const sendInvoiceWhatsApp = async (id) => {
     const inv = state.invoices.find(i => i.id === id);
     if (!inv) return;
 
-    showToast("Generating PDF and Secure Link...", "info");
+    showToast("Preparing Invoice PDF...", "info");
 
     try {
-        // 1. Prepare Template with data
+        // 1. Generate the PDF
         fillInvoiceTemplate(inv);
 
         const element = document.getElementById('invoice-template');
@@ -1102,29 +1102,42 @@ const sendInvoiceWhatsApp = async (id) => {
         element.style.top = originalTop;
         element.style.zIndex = originalZ;
 
-        // 2. Convert to Blob
         const pdfBlob = pdf.output('blob');
+        const pdfFile = new File([pdfBlob], `Invoice_${inv.id}.pdf`, { type: 'application/pdf' });
 
-        // 3. Upload to Firebase Storage
+        // 2. Try System Share API (Best for Mobile - Sends Actual File)
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+            try {
+                await navigator.share({
+                    files: [pdfFile],
+                    title: `Invoice ${inv.id}`,
+                    text: `Hello ${inv.customer}, please find your official invoice from ${state.settings.bizName}.`
+                });
+                showToast("Invoice Shared Successfully!", "success");
+                return; // Exit if shared via system
+            } catch (shareErr) {
+                console.log("System share cancelled or failed, falling back to link...");
+            }
+        }
+
+        // 3. Fallback: Upload to Firebase Storage and Send Link (For Desktop/Older Browsers)
+        showToast("Uploading to Cloud for sharing...", "info");
         const storageRef = storage.ref(`invoices/${inv.id}_${Date.now()}.pdf`);
         const snapshot = await storageRef.put(pdfBlob);
         const downloadUrl = await snapshot.ref.getDownloadURL();
 
-        // 4. Send Professional Message with the Link
-        const msg = `*📄 DOORFLOW OFFICIAL INVOICE: ${inv.id}*%0A%0A` +
+        const msg = `*📄 OFFICIAL INVOICE: ${inv.id}*%0A%0A` +
             `Hello ${inv.customer},%0A` +
-            `Please find your official GST invoice below. Click the link to view/download the PDF:%0A%0A` +
+            `Please click the link below to view/download your PDF invoice:%0A%0A` +
             `${downloadUrl}%0A%0A` +
-            `*Amount:* ₹${inv.total}%0A` +
-            `*Date:* ${inv.date}%0A%0A` +
-            `Thank you for choosing *DoorFlow Services*!`;
+            `Thank you!%0A*${state.settings.bizName}*`;
 
         openWhatsApp(inv.phone, msg);
-        showToast("PDF Link sent successfully!", "success");
+        showToast("WhatsApp Redirected with Link!", "success");
 
     } catch (err) {
-        console.error("Failed to generate/upload PDF:", err);
-        showToast("Error sending PDF link: " + err.message, "danger");
+        console.error("Failed to share PDF:", err);
+        showToast("Error: " + err.message, "danger");
     }
 };
 
