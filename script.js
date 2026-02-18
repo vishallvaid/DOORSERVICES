@@ -1,7 +1,3 @@
-/**
- * DoorFlow CRM - Main Script
- */
-
 // --- State Management ---
 let state = {
     currentUser: null,
@@ -24,39 +20,73 @@ let state = {
     }
 };
 
-// --- Initial Mock Data ---
+// --- Firebase Integration ---
+const firebaseConfig = {
+    apiKey: "AIzaSyCRObpPsRVlUsC5hH4HqPC2rFb6K5WNxeY",
+    authDomain: "dashboard-98ae5.firebaseapp.com",
+    databaseURL: "https://dashboard-98ae5-default-rtdb.firebaseio.com",
+    projectId: "dashboard-98ae5",
+    storageBucket: "dashboard-98ae5.firebasestorage.app",
+    messagingSenderId: "183263318221",
+    appId: "1:183263318221:web:b84d2fb58431f209559984"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// --- Initial Mock Data & Firebase Sync ---
 const initMockData = () => {
-    const savedState = localStorage.getItem('doorflow_crm_state');
-    if (savedState) {
-        const parsed = JSON.parse(savedState);
-        state = { ...state, ...parsed };
+    showToast("Connecting to Cloud Database...", "info");
 
-        // Ensure catalog and chat are arrays if they were missing
-        if (!state.catalog) state.catalog = [];
-        if (!state.chatMessages) state.chatMessages = [];
-        return;
-    }
+    // Fetch state from Firebase
+    db.ref('crm_state').on('value', (snapshot) => {
+        const cloudData = snapshot.val();
+        if (cloudData) {
+            // Keep local currentUser if exists (to prevent logout on update)
+            const localUser = state.currentUser;
+            state = { ...state, ...cloudData };
+            state.currentUser = localUser;
 
-    state.leads = [];
-    state.tasks = [];
-    state.invoices = [];
-    state.catalog = [];
-    state.chatMessages = [];
-
-    // Default Employees
-    state.employees = [
-        { id: 'ADM001', name: 'Vishal (Admin)', password: 'admin', role: 'admin', isManager: true },
-        { id: 'SAL001', name: 'Rohan (Sales)', password: '123', role: 'sales', isManager: true },
-        { id: 'DES001', name: 'Sonia (Design)', password: '123', role: 'design', isManager: false },
-        { id: 'PRO001', name: 'Rahul (Prod)', password: '123', role: 'production', isManager: false },
-        { id: 'DEL001', name: 'Vikram (Delivery)', password: '123', role: 'delivery', isManager: false }
-    ];
-
-    saveState();
+            // Re-render current view if logged in
+            if (state.currentUser) {
+                const currentActiveNav = document.querySelector('.nav-item.active');
+                if (currentActiveNav) {
+                    renderView(currentActiveNav.dataset.view);
+                } else {
+                    renderDashboard();
+                }
+            }
+        } else {
+            // Initial setup if DB is empty
+            state.employees = [
+                { id: 'ADM001', name: 'Vishal (Admin)', password: 'admin', role: 'admin', isManager: true },
+                { id: 'SAL001', name: 'Rohan (Sales)', password: '123', role: 'sales', isManager: true },
+                { id: 'DES001', name: 'Sonia (Design)', password: '123', role: 'design', isManager: false },
+                { id: 'PRO001', name: 'Rahul (Prod)', password: '123', role: 'production', isManager: false },
+                { id: 'DEL001', name: 'Vikram (Delivery)', password: '123', role: 'delivery', isManager: false }
+            ];
+            saveState();
+        }
+        showToast("Synchronized with Cloud", "success");
+    });
 };
 
 const saveState = () => {
+    // Save to LocalStorage (Fallback)
     localStorage.setItem('doorflow_crm_state', JSON.stringify(state));
+
+    // Sync to Firebase (Live)
+    // Create a copy without the currentUser to avoid storing sensitive session data globally
+    const dataToSync = { ...state };
+    delete dataToSync.currentUser;
+
+    db.ref('crm_state').set(dataToSync)
+        .then(() => console.log("Cloud Sync Successful"))
+        .catch(err => {
+            console.error("Cloud Sync Failed:", err);
+            showToast("Sync Error: " + err.message, "danger");
+        });
 };
 
 // --- Role Definitions ---
