@@ -10,6 +10,8 @@ let state = {
     invoices: [],
     employees: [],
     attendance: [],
+    catalog: [],
+    chatMessages: [],
     settings: {
         googleSheetUrl: "",
         bizName: "DoorFlow Services",
@@ -17,29 +19,29 @@ let state = {
         bizPhone: "9999999999",
         bizEmail: "info@doorflow.com",
         bizGst: "22ABCDE1234F1Z5",
-        gstRate: 18
+        gstRate: 18,
+        crmWebhook: ""
     }
 };
 
 // --- Initial Mock Data ---
 const initMockData = () => {
-    // If you want to force a reset, uncomment the next line once and refresh
-    // localStorage.removeItem('doorflow_crm_state');
-
     const savedState = localStorage.getItem('doorflow_crm_state');
     if (savedState) {
         const parsed = JSON.parse(savedState);
-        // Clean up old dummy data if it exists in individual leads/tasks
-        if (parsed.leads.length > 0 && parsed.leads[0].id === 'L1') parsed.leads = [];
-        if (parsed.tasks.length > 0 && parsed.tasks[0].id === 'T1') parsed.tasks = [];
-
         state = { ...state, ...parsed };
+
+        // Ensure catalog and chat are arrays if they were missing
+        if (!state.catalog) state.catalog = [];
+        if (!state.chatMessages) state.chatMessages = [];
         return;
     }
 
     state.leads = [];
     state.tasks = [];
     state.invoices = [];
+    state.catalog = [];
+    state.chatMessages = [];
 
     // Default Employees
     state.employees = [
@@ -153,6 +155,14 @@ const login = (user) => {
         trackNav.classList.add('hidden');
     }
 
+    // Settings Nav Visibility
+    const settingsNav = document.getElementById('nav-settings');
+    if (role === 'admin') {
+        settingsNav.classList.remove('hidden');
+    } else {
+        settingsNav.classList.add('hidden');
+    }
+
     renderView('dashboard');
     renderChat();
     showToast(`Logged in as ${ROLES[role].name}`, 'success');
@@ -179,6 +189,138 @@ const renderView = (view) => {
         case 'invoices': renderInvoices(); break;
         case 'tracking': renderTracking(); break;
         case 'teams': renderTeams(); break;
+        case 'settings': renderSettings(); break;
+    }
+};
+
+const renderSettings = () => {
+    viewTitle.textContent = "Global CRM Settings & Integrations";
+    contentBody.innerHTML = `
+        <div class="grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:2rem;">
+            <div class="card">
+                <h3>Business Identity</h3>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
+                    <div class="form-group">
+                        <label>Business Name</label>
+                        <input type="text" id="s-biz-name" class="login-input" value="${state.settings.bizName}">
+                    </div>
+                    <div class="form-group">
+                        <label>Business Phone</label>
+                        <input type="text" id="s-biz-phone" class="login-input" value="${state.settings.bizPhone}">
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Address</label>
+                        <input type="text" id="s-biz-address" class="login-input" value="${state.settings.bizAddress}">
+                    </div>
+                    <div class="form-group">
+                        <label>Business Email</label>
+                        <input type="email" id="s-biz-email" class="login-input" value="${state.settings.bizEmail}">
+                    </div>
+                    <div class="form-group">
+                        <label>GSTIN Number</label>
+                        <input type="text" id="s-biz-gst" class="login-input" value="${state.settings.bizGst}">
+                    </div>
+                </div>
+                <button class="btn btn-primary" style="margin-top:20px; width:100%" onclick="saveGlobalSettings()">Save Identity Settings</button>
+            </div>
+
+            <div class="card">
+                <h3>CRM & Webhook Integration</h3>
+                <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:15px;">Connect your dashboard to external CRM or Automation tools (n8n, Zapier etc.)</p>
+                
+                <div class="form-group">
+                    <label>CRM Webhook URL</label>
+                    <input type="text" id="s-crm-webhook" class="login-input" placeholder="https://n8n.example.com/webhook/..." value="${state.settings.crmWebhook || ''}">
+                </div>
+                
+                <div style="margin-top:20px; display:flex; flex-direction:column; gap:10px;">
+                    <button class="btn btn-outline" style="justify-content:center" onclick="testWebhook()">
+                        <i class="fas fa-plug"></i> Test Connection
+                    </button>
+                    <button class="btn btn-success" style="justify-content:center; background:#4f46e5; color:white;" onclick="syncAllData()">
+                        <i class="fas fa-sync"></i> Sync All Data to CRM
+                    </button>
+                </div>
+
+                <div style="margin-top:30px; padding:15px; background:var(--bg-main); border-radius:10px;">
+                    <h4 style="font-size:0.9rem; margin-bottom:10px;">Sync Statistics</h4>
+                    <div style="display:flex; justify-content:space-between; font-size:0.8rem;">
+                        <span>Leads Count:</span>
+                        <strong>${state.leads.length}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-top:5px;">
+                        <span>Tasks Count:</span>
+                        <strong>${state.tasks.length}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-top:5px;">
+                        <span>Invoices Count:</span>
+                        <strong>${state.invoices.length}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+const saveGlobalSettings = () => {
+    state.settings.bizName = document.getElementById('s-biz-name').value;
+    state.settings.bizPhone = document.getElementById('s-biz-phone').value;
+    state.settings.bizAddress = document.getElementById('s-biz-address').value;
+    state.settings.bizEmail = document.getElementById('s-biz-email').value;
+    state.settings.bizGst = document.getElementById('s-biz-gst').value;
+    state.settings.crmWebhook = document.getElementById('s-crm-webhook').value;
+    saveState();
+    showToast("Global Settings updated successfully!", "success");
+};
+
+const testWebhook = async () => {
+    const url = document.getElementById('s-crm-webhook').value;
+    if (!url) {
+        showToast("Enter a webhook URL first", "warning");
+        return;
+    }
+    showToast("Sending test payload...", "info");
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event: 'test', time: new Date().toISOString() })
+        });
+        if (res.ok) showToast("Webhook Live! Test successful.", "success");
+        else showToast("Webhook responded with error: " + res.status, "danger");
+    } catch (e) {
+        showToast("Connection failed. Check CORS or URL.", "danger");
+    }
+};
+
+const syncAllData = async () => {
+    const url = state.settings.crmWebhook;
+    if (!url) {
+        showToast("Configure CRM Webhook in Settings first", "danger");
+        return;
+    }
+
+    showToast("Syncing all data to CRM...", "info");
+    const payload = {
+        timestamp: new Date().toISOString(),
+        business: state.settings.bizName,
+        data: {
+            leads: state.leads,
+            tasks: state.tasks,
+            invoices: state.invoices
+        }
+    };
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) showToast("All data successfully synced to CRM!", "success");
+        else showToast("Sync failed: Webhook returned " + res.status, "danger");
+    } catch (e) {
+        showToast("Sync Error: " + e.message, "danger");
     }
 };
 
@@ -977,8 +1119,8 @@ const handleFetchLeads = async () => {
     }
 
     const sheetId = match[1];
-    // Use gviz API for reliable CSV export avoiding some CORS issues
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
+    // Using the /export endpoint which is more reliable for local file access
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
 
     showToast("Connecting to Google Sheets...", "info");
 
@@ -999,21 +1141,29 @@ const handleFetchLeads = async () => {
 
         // Auto-detect columns
         const headers = rows[0].map(h => h.toLowerCase().replace(/['"]/g, ''));
-        const nameIdx = headers.findIndex(h => h.includes('name'));
-        const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('contact'));
-        const reqIdx = headers.findIndex(h => h.includes('requirement') || h.includes('detail') || h.includes('desc'));
-        const dateIdx = headers.findIndex(h => h.includes('date'));
-        const addrIdx = headers.findIndex(h => h.includes('address') || h.includes('location'));
+        let nameIdx = headers.findIndex(h => h.includes('name'));
+        let phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('contact'));
+        let reqIdx = headers.findIndex(h => h.includes('requirement') || h.includes('detail') || h.includes('desc'));
+        let dateIdx = headers.findIndex(h => h.includes('date'));
+        let addrIdx = headers.findIndex(h => h.includes('address') || h.includes('location'));
 
-        const newLeads = rows.slice(1).map((row, index) => {
+        // FALLBACK: If no clear headers found (like in the user's sheet), assume column 0 is Name and column 1 is Phone
+        let dataRows = rows.slice(1);
+        if (nameIdx === -1 && phoneIdx === -1) {
+            nameIdx = 0;
+            phoneIdx = 1;
+            dataRows = rows; // Use all rows if first row isn't a header
+        }
+
+        const newLeads = dataRows.map((row, index) => {
             // Remove wrapping quotes from gviz output if any remain
             const clean = (val) => val ? val.replace(/^"|"$/g, '').trim() : '';
 
-            const name = (nameIdx > -1 ? row[nameIdx] : row[0]) || 'Unknown';
-            const phone = (phoneIdx > -1 ? row[phoneIdx] : row[1]) || '';
-            const requirement = (reqIdx > -1 ? row[reqIdx] : row[2]) || 'No details';
-            const date = (dateIdx > -1 ? row[dateIdx] : row[3]) || new Date().toISOString().split('T')[0];
-            const address = (addrIdx > -1 ? row[addrIdx] : row[4]) || 'No address';
+            const name = (nameIdx > -1 && row[nameIdx] ? row[nameIdx] : (row[0] || 'Unknown'));
+            const phone = (phoneIdx > -1 && row[phoneIdx] ? row[phoneIdx] : (row[1] || ''));
+            const requirement = (reqIdx > -1 && row[reqIdx] ? row[reqIdx] : (row[2] || 'No details'));
+            const date = (dateIdx > -1 && row[dateIdx] ? row[dateIdx] : (row[3] || new Date().toISOString().split('T')[0]));
+            const address = (addrIdx > -1 && row[addrIdx] ? row[addrIdx] : (row[4] || 'No address'));
 
             return {
                 id: 'L' + (Date.now() + index),
@@ -1037,7 +1187,7 @@ const handleFetchLeads = async () => {
 
     } catch (error) {
         console.error("Fetch error:", error);
-        showToast("Unable to fetch data. Ensure the sheet is 'Published to Web' or 'Anyone with link'.", "danger");
+        showToast("Access Blocked by Browser (CORS)! To fix: 1. Publish Sheet to Web (File > Share > Publish), 2. Use the 'Web Link' instead.", "danger");
     }
 };
 
